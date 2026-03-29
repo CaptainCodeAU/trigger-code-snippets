@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Trigger Code Snippets — Manager</title>
+  <link rel="stylesheet" href="manager.css">
+</head>
+<body>
+  <div class="app">
+    <header class="toolbar">
+      <div class="toolbar-left">
+        <span class="logo">&#9889;</span>
+        <h1>Trigger Code Snippets</h1>
+      </div>
+      <div class="toolbar-right">
+        <span id="save-indicator" class="save-indicator"></span>
+        <button id="btn-import" class="btn btn-secondary" title="Import snippets from JSON file">Import</button>
+        <button id="btn-export" class="btn btn-secondary" title="Export all snippets as JSON">Export</button>
+        <button id="btn-add" class="btn btn-primary" title="Add a new snippet">+ New Snippet</button>
+      </div>
+    </header>
+
+    <div class="main">
+      <aside class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+          <span class="sidebar-title">Snippets</span>
+          <span class="sidebar-count" id="snippet-count"></span>
+        </div>
+        <div class="snippet-list" id="snippet-list">
+          <!-- Dynamically populated -->
+        </div>
+        <div class="resize-handle" id="resize-handle"></div>
+      </aside>
+
+      <section class="editor" id="editor">
+        <div class="editor-placeholder" id="editor-placeholder">
+          <div class="placeholder-icon">&#9889;</div>
+          <div class="placeholder-text">Select a snippet to edit</div>
+          <div class="placeholder-hint">Or click "+ New Snippet" to create one</div>
+        </div>
+        <div class="editor-content" id="editor-content" style="display:none">
+          <div class="editor-section">
+            <label for="snippet-name">Name</label>
+            <input type="text" id="snippet-name" placeholder="Snippet name" autocomplete="off" spellcheck="false">
+          </div>
+
+          <div class="editor-section">
+            <label for="snippet-urls">
+              URL Patterns
+              <span class="label-hint">One per line. Chrome match patterns (e.g., *://*.example.com/*)</span>
+            </label>
+            <textarea id="snippet-urls" placeholder="*://*/*" rows="3" spellcheck="false"></textarea>
+            <div id="url-validation" class="validation-msg"></div>
+          </div>
+
+          <div class="editor-section editor-section-code">
+            <label for="snippet-code">Code</label>
+            <div class="code-wrapper">
+              <div class="line-numbers" id="line-numbers"></div>
+              <textarea id="snippet-code" placeholder="// Your JavaScript code here..." spellcheck="false"></textarea>
+            </div>
+          </div>
+
+          <div class="editor-footer">
+            <button id="btn-delete" class="btn btn-danger">Delete Snippet</button>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <input type="file" id="import-input" accept=".json" style="display:none">
+  <script type="module" src="manager.js"></script>
+</body>
+</html>
