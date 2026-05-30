@@ -1,5 +1,7 @@
 # trigger-code-snippets
 
+> **Status: As-built.** This document describes the shipped **v1.0.0** implementation and was verified against the source on 2026-05-30 — the code matches this spec apart from the minor, explicitly-marked notes inline below. The **"Future Considerations (v2+)"** section is a roadmap and is **not** yet implemented.
+
 ## Overview
 
 A Chrome extension that lets users save JavaScript code snippets, assign keyboard shortcuts to them, and run them on specific web pages. Snippets execute in the page's main JavaScript context using the Chrome DevTools Protocol (`chrome.debugger` API), behaving like Chrome DevTools snippets but triggered via positional keyboard shortcuts, the toolbar popup, or the right-click context menu.
@@ -18,6 +20,7 @@ Personal-use tool. Chrome only. No publishing to the Chrome Web Store.
   - **Code** (required) — JavaScript code, entered in a plain `<textarea>` with a **line number gutter**.
   - **Positional keyboard shortcut** (automatic) — the first 9 snippets are assigned `Alt+Shift+1` through `Alt+Shift+9` based on their list position. Snippets at position 10+ have no keyboard shortcut.
   - **Allowed URLs** (required) — one or more wildcard match patterns defining which pages the snippet is allowed to run on. Snippets will **not** run if the current page URL does not match any of the specified patterns.
+  - *Note: "required" fields are guidance, not hard-enforced. The manager validates URL patterns and flags malformed ones, but does not block saving a snippet with an empty name or an empty URL list. A snippet with no valid URL pattern simply never runs (silent no-op).*
 - All snippet data is stored in **Chrome extension storage** (`chrome.storage.local`).
 - Changes are **auto-saved** with an 800ms debounce. A visual indicator shows "Saving..." → "Auto-saved ✓" → fades out.
 
@@ -73,12 +76,12 @@ Personal-use tool. Chrome only. No publishing to the Chrome Web Store.
   - **Append to existing** — adds imported snippets after existing ones. Duplicate names are resolved by appending `(2)`, `(3)`, etc.
   - **Cancel** — dismisses the dialog.
 - Import validates the JSON schema: must be an array of objects, each with `name` (non-empty string), `code` (string), and `allowedUrls` (array).
-- Handles large snippets (60KB+ individual files) without issues — `chrome.storage.local` has a ~5MB default quota.
+- Handles large snippets (60KB+ individual files) — `chrome.storage.local` has a ~5MB default quota. *Caveat: the entire snippet array is rewritten on every auto-save and there is currently no storage-quota error handling, so approaching the quota would fail silently (the save indicator would still show "Auto-saved ✓").*
 
 ### 8. Default Snippets (First Install)
 
 - On first install (`chrome.runtime.onInstalled` with `reason === 'install'`), 16 default snippets are loaded from `defaults/default-snippets.json`.
-- Defaults are sourced from the [CaptainCodeAU/devtools-snippets](https://github.com/CaptainCodeAU/devtools-snippets) GitHub repository.
+- Defaults are sourced from the [CaptainCodeAU/devtools-snippets](https://github.com/CaptainCodeAU/devtools-snippets) GitHub repository. *Note: the bundled `default-snippets.json` is a point-in-time snapshot and has since diverged from upstream — it still ships retired entries (Web Page Inspector v1, AI Studio DOM Inspectors) and lacks newer upstream snippets (Claude.ai Chat Exporter v6, YouTube Playback Speed Control v2). Re-sync if you want parity.*
 - Each default snippet has pre-configured URL patterns based on its purpose:
   - General utilities (`*://*/*`): Clear Site Data & Cache, Download All Resources, Font Downloader, HTML to PDF, Resource Analyzer, Web Page Inspector v1 & v2.
   - Google AI Studio (`*://aistudio.google.com/*`): DOM Inspector (Library), DOM Inspector (Prompts), Chat Exporter (Base64), Chat Exporter (Separate), Library Exporter.
@@ -143,7 +146,7 @@ Personal-use tool. Chrome only. No publishing to the Chrome Web Store.
 ### Manifest
 
 - **Manifest V3**.
-- Permissions: `activeTab`, `scripting`, `contextMenus`, `storage`, `debugger`.
+- Permissions: `activeTab`, `scripting`, `contextMenus`, `storage`, `debugger`. *Note: `scripting` is declared but currently unused — all execution goes through `chrome.debugger` (see Architecture Notes). The permission is vestigial and could be removed.*
 - Host permissions: `<all_urls>`.
 - Background: **module** service worker (`background.js`).
 - Content scripts: `content.js` on `<all_urls>` at `document_start`.
@@ -233,7 +236,7 @@ trigger-code-snippets/
 
 - **Lightning bolt (⚡)** on a dark navy background (`#1a1a2e` → `#16213e` gradient) with rounded corners.
 - Yellow-to-orange gradient bolt color (`#FFD60A` → `#FFAA00`).
-- Generated programmatically using a Node.js script (`generate-icons.js`) that produces raw PNGs at 16px, 48px, and 128px using `zlib` for PNG compression. The script is not part of the extension — it is run once to produce the icon files.
+- Generated programmatically using a Node.js script (`generate-icons.js`) that produces raw PNGs at 16px, 48px, and 128px using `zlib` for PNG compression. The script is **not included in this repository** — it was run once externally to produce the committed icon files (`icons/icon16.png`, `icon48.png`, `icon128.png`).
 
 ---
 
