@@ -41,7 +41,7 @@ async function rebuildContextMenus() {
   // it survives the storage-change removeAll() below.
   chrome.contextMenus.create({
     id: 'list-all-tab-urls',
-    title: 'List all tab URLs',
+    title: 'Copy all tab URLs to clipboard',
     contexts: ['action']
   });
 
@@ -140,7 +140,7 @@ async function listAllTabUrls() {
   const urls = tabs.map(t => t.url).filter(Boolean);
   const text = urls.join('\n');
   console.log(`[TCS] All tab URLs (${urls.length}):\n${text}`);
-  await copyToClipboard(text);
+  return copyToClipboard(text);
 }
 
 // --- Offscreen clipboard (service workers have no clipboard access) ---
@@ -184,8 +184,10 @@ async function copyToClipboard(text) {
       text
     });
     if (!resp || !resp.ok) console.error('[TCS] Clipboard write did not confirm success');
+    return !!(resp && resp.ok);
   } catch (err) {
     console.error('[TCS] Clipboard copy failed:', err);
+    return false;
   } finally {
     // CLIPBOARD offscreen docs have no auto-close; free the single-doc slot.
     try { await chrome.offscreen.closeDocument(); } catch { /* already closed */ }
@@ -201,6 +203,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   } else if (message.type === 'execute-by-id') {
     handleExecuteById(message.snippetId, message.tabId).then(() => sendResponse({ ok: true }));
+    return true;
+  } else if (message.type === 'copy-all-tab-urls') {
+    listAllTabUrls().then((ok) => sendResponse({ ok }));
     return true;
   }
 });
