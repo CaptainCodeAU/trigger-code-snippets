@@ -36,6 +36,15 @@ let contextMenuRebuildTimer = null;
 async function rebuildContextMenus() {
   await chrome.contextMenus.removeAll();
 
+  // Toolbar-icon (action) menu: right-click the extension icon to dump every
+  // open tab's URL to the console and clipboard. Recreated on every rebuild so
+  // it survives the storage-change removeAll() below.
+  chrome.contextMenus.create({
+    id: 'list-all-tab-urls',
+    title: 'List all tab URLs',
+    contexts: ['action']
+  });
+
   chrome.contextMenus.create({
     id: 'tcs-parent',
     title: 'Trigger Code Snippets',
@@ -89,6 +98,10 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
 
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   console.log('[TCS] Context menu clicked:', info.menuItemId);
+  if (info.menuItemId === 'list-all-tab-urls') {
+    await listAllTabUrls();
+    return;
+  }
   if (!info.menuItemId.toString().startsWith('tcs-snippet-')) return;
   const snippetId = info.menuItemId.toString().replace('tcs-snippet-', '');
   const snippet = await getSnippetById(snippetId);
@@ -115,6 +128,67 @@ async function executeSnippet(snippet, tabId) {
   } catch (err) {
     try { await chrome.debugger.detach(target); } catch { /* already detached */ }
     console.error('[TCS] executeScript FAILED for:', snippet.name, err);
+  }
+}
+
+// --- List all tab URLs (toolbar-icon menu) ---
+
+async function listAllTabUrls() {
+  // Spanning mode (no "incognito":"split" in the manifest) means query({})
+  // returns tabs from every window, including incognito.
+  const tabs = await chrome.tabs.query({});
+  const urls = tabs.map(t => t.url).filter(Boolean);
+  const text = urls.join('\n');
+  console.log(`[TCS] All tab URLs (${urls.length}):\n${text}`);
+  await copyToClipboard(text);
+}
+
+// --- Offscreen clipboard (service workers have no clipboard access) ---
+
+let creatingOffscreen = null; // in-flight createDocument promise, serializes callers
+
+async function ensureOffscreenDocument() {
+  const offscreenUrl = chrome.runtime.getURL('offscreen.html');
+  const existing = await chrome.runtime.getContexts({
+    contextTypes: ['OFFSCREEN_DOCUMENT'],
+    documentUrls: [offscreenUrl]
+  });
+  if (existing.length > 0) return;
+
+  // getContexts alone can't prevent a double-create race (two rapid clicks both
+  // see zero contexts); the shared `creating` promise makes the second caller
+  // await the first createDocument instead of firing its own.
+  if (creatingOffscreen) {
+    await creatingOffscreen;
+  } else {
+    creatingOffscreen = chrome.offscreen.createDocument({
+      url: 'offscreen.html',
+      reasons: ['CLIPBOARD'],
+      justification: 'Copy the list of open tab URLs to the clipboard.'
+    });
+    try {
+      await creatingOffscreen;
+    } finally {
+      creatingOffscreen = null;
+    }
+  }
+}
+
+async function copyToClipboard(text) {
+  try {
+    await ensureOffscreenDocument();
+    // Await the offscreen ack so the write finishes before we close the doc.
+    const resp = await chrome.runtime.sendMessage({
+      target: 'tcs-offscreen',
+      type: 'copy-to-clipboard',
+      text
+    });
+    if (!resp || !resp.ok) console.error('[TCS] Clipboard write did not confirm success');
+  } catch (err) {
+    console.error('[TCS] Clipboard copy failed:', err);
+  } finally {
+    // CLIPBOARD offscreen docs have no auto-close; free the single-doc slot.
+    try { await chrome.offscreen.closeDocument(); } catch { /* already closed */ }
   }
 }
 

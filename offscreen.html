@@ -1,0 +1,12 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+</head>
+<body>
+  <!-- Hidden clipboard scratch target. This page exists only so the service
+       worker has a DOM context to copy text from (MV3 SWs have no clipboard). -->
+  <textarea id="clipboard-target" aria-hidden="true"></textarea>
+  <script src="offscreen.js"></script>
+</body>
+</html>
