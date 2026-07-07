@@ -33,6 +33,43 @@ body {
   color: #e6edf3;
 }
 
+.header-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.icon-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  color: #8b949e;
+  cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.icon-btn:hover {
+  color: #e6edf3;
+  background: #21262d;
+}
+
+.icon-btn:active {
+  background: #30363d;
+}
+
+.icon-btn.done {
+  color: #3fb950;
+}
+
+.icon-btn.failed {
+  color: #f85149;
+}
+
 #snippet-list {
   padding: 4px 0;
 }

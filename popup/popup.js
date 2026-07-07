@@ -1,6 +1,35 @@
 import { getSnippets, matchUrl } from '../shared/storage.js';
 
 async function init() {
+  // Settings icon -> options page. Wired first so it works even when there
+  // are no snippets (the empty-state path returns early below).
+  document.getElementById('settings-btn').addEventListener('click', () => {
+    chrome.runtime.openOptionsPage();
+    window.close();
+  });
+
+  // Copy-URLs icon -> ask the service worker to copy every open tab's URL to the
+  // clipboard (same action as the toolbar-icon menu), with brief inline feedback.
+  const copyBtn = document.getElementById('copy-urls-btn');
+  copyBtn.addEventListener('click', async () => {
+    copyBtn.disabled = true;
+    let ok = false;
+    try {
+      const resp = await chrome.runtime.sendMessage({ type: 'copy-all-tab-urls' });
+      ok = !!(resp && resp.ok);
+    } catch {
+      ok = false;
+    }
+    copyBtn.disabled = false;
+    copyBtn.classList.toggle('done', ok);
+    copyBtn.classList.toggle('failed', !ok);
+    copyBtn.title = ok ? 'Copied!' : 'Copy failed';
+    setTimeout(() => {
+      copyBtn.classList.remove('done', 'failed');
+      copyBtn.title = 'Copy all tab URLs to clipboard';
+    }, 1400);
+  });
+
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   const snippets = await getSnippets();
   const list = document.getElementById('snippet-list');
