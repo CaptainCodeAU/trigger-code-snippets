@@ -7,7 +7,8 @@ A personal-use **Manifest V3 Chrome extension** that stores JavaScript snippets 
 - **Vanilla JS, no build step, no package manager.** Pure ES modules (`background.js`, `popup/`, `manager/`, `shared/`) plus one IIFE content script (`content.js`). The Python/`uv` and Node/`pnpm` rules below do **not** apply here — there is nothing to install or build.
 - **Run/test it:** `chrome://extensions` → enable Developer mode → **Load unpacked** → select this folder. Reload the extension after edits (and reload the target page for `content.js` changes).
 - **Storage:** snippets live in `chrome.storage.local` under the `snippets` key; `shared/storage.js` is the single storage layer (imported by background/popup/manager — `content.js` messages the service worker instead).
-- **Execution:** snippets run via `chrome.debugger` (CDP `Runtime.evaluate`), which is what bypasses page CSP; the `scripting` permission is declared but unused.
+- **Execution:** snippets run via `chrome.debugger` (CDP `Runtime.evaluate`), which is what bypasses page CSP; the `scripting` permission is declared but currently unused (retained for future scripting work, not dead weight).
+- **Permissions:** the manifest declares a broad 30-permission set (as of v1.1.0). Only `offscreen` (clipboard for the "List all tab URLs" toolbar action) and `tabs` are exercised in code today; the other ~25 are **intentionally pre-loaded** for near-term automation/accessibility work, not accreted dead weight. Prefer pre-loading over churning the manifest per feature; do not prune without checking with the owner.
 - **Defaults:** `defaults/default-snippets.json` is a first-install-only seed copied from `~/CODE/CaptainCodeAU/SCRIPTS/devtools-snippets` (top-level files = latest; `archive/` = retired). Treat that repo as **read-only**.
 - **Spec:** `docs/SPEC.md` is the as-built architecture / ADR / roadmap reference.
 
