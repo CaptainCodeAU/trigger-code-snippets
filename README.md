@@ -16,7 +16,7 @@ Personal-use tool. Not published to the Chrome Web Store.
 - **URL restrictions** — each snippet only runs on matching pages (Chrome match patterns)
 - **CSP bypass** — executes via `chrome.debugger`, working on strict sites like YouTube
 - **Dark theme** management page with resizable sidebar and line numbers
-- **15 default snippets** pre-loaded from [CaptainCodeAU/devtools-snippets](https://github.com/CaptainCodeAU/devtools-snippets)
+- **16 default snippets** pre-loaded from [CaptainCodeAU/devtools-snippets](https://github.com/CaptainCodeAU/devtools-snippets)
 
 ## Installation
 
@@ -72,7 +72,7 @@ trigger-code-snippets/
 │   ├── manager.css
 │   └── manager.js         # Management page: CRUD, drag reorder, auto-save
 ├── defaults/
-│   └── default-snippets.json  # 15 pre-loaded snippets
+│   └── default-snippets.json  # 16 pre-loaded snippets
 ├── icons/
 │   ├── icon16.png
 │   ├── icon48.png

@@ -80,10 +80,10 @@ Personal-use tool. Chrome only. No publishing to the Chrome Web Store.
 
 ### 8. Default Snippets (First Install)
 
-- On first install (`chrome.runtime.onInstalled` with `reason === 'install'`), 15 default snippets are loaded from `defaults/default-snippets.json`.
+- On first install (`chrome.runtime.onInstalled` with `reason === 'install'`), 16 default snippets are loaded from `defaults/default-snippets.json`.
 - Defaults are sourced from the [CaptainCodeAU/devtools-snippets](https://github.com/CaptainCodeAU/devtools-snippets) GitHub repository. *Note: the bundled `default-snippets.json` was re-synced to upstream on 2026-05-30 (commit `2736ce3`) — retired entries (Web Page Inspector v1, AI Studio DOM Inspectors) were dropped and newer snippets (Claude.ai Chat Exporter, YouTube Playback Speed) added. It remains a point-in-time snapshot; re-sync again if upstream moves ahead.*
 - Each default snippet has pre-configured URL patterns based on its purpose:
-  - General utilities (`*://*/*`): Clear Site Data & Cache, Download All Resources, Font Downloader, HTML to PDF, Resource Analyzer, Web Page Inspector v2.
+  - General utilities (`*://*/*`): Clear Site Data & Cache, Download All Resources, Font Downloader, HTML to PDF, Resource Analyzer, Web Page Inspector v2, Batch URL downloader.
   - Google AI Studio (`*://aistudio.google.com/*`): Chat Exporter (Base64), Chat Exporter (Separate), Library Exporter.
   - Claude.ai (`*://*.claude.ai/*`): Chat Exporter.
   - n8n (`*://*.n8n.io/*`): n8n Component Inspector, Cleanup & Reveal Workflow.
@@ -199,7 +199,7 @@ trigger-code-snippets/
 │                          # drag-and-drop reorder, import/export UI,
 │                          # line number gutter, sidebar resize, URL validation
 ├── defaults/
-│   └── default-snippets.json  # 15 pre-loaded snippets from GitHub repo
+│   └── default-snippets.json  # 16 pre-loaded snippets from GitHub repo
 ├── icons/
 │   ├── icon16.png         # ⚡ lightning bolt on dark navy background
 │   ├── icon48.png         # (generated via Node.js canvas script)
