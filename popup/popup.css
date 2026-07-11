@@ -111,6 +111,12 @@ body {
   margin-right: 8px;
 }
 
+/* Active rows whose rule targets this site specifically (no all-sites
+   catch-all) - accent the name text so tailored snippets stand out. */
+.snippet-item.site-specific .snippet-name {
+  color: #58a6ff;
+}
+
 .shortcut-badge {
   font-size: 10px;
   color: #8b949e;

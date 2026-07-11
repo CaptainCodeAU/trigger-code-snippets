@@ -81,8 +81,13 @@ async function init() {
   }
 
   for (const { snippet, enabled } of displayRows) {
+    // Active rows whose rule targets this site specifically (no all-sites
+    // `*://*/*` catch-all) get the accent color on their name text.
+    const siteSpecific = enabled && !(snippet.allowedUrls || []).includes('*://*/*');
     const item = document.createElement('div');
-    item.className = 'snippet-item' + (enabled ? '' : ' disabled');
+    item.className = 'snippet-item'
+      + (enabled ? '' : ' disabled')
+      + (siteSpecific ? ' site-specific' : '');
 
     const nameSpan = document.createElement('span');
     nameSpan.className = 'snippet-name';
