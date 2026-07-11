@@ -455,6 +455,15 @@ function setupResize() {
   });
 }
 
+// ===== Footer =====
+
+// Fill the credit footer's version label from the manifest so it self-updates.
+function showVersion() {
+  const el = document.getElementById('footer-version');
+  if (el) el.textContent = 'v' + chrome.runtime.getManifest().version;
+}
+
 // ===== Init =====
 init();
 setupResize();
+showVersion();
