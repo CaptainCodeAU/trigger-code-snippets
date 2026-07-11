@@ -5,8 +5,8 @@
 }
 
 body {
-  width: 320px;
-  max-height: 480px;
+  width: 380px;
+  max-height: 560px;
   overflow-y: auto;
   background: #0d1117;
   color: #e6edf3;
@@ -78,24 +78,29 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 16px;
+  padding: 6px 16px;
   cursor: pointer;
-  transition: background 0.15s ease;
+  transition: background 0.15s ease, border-color 0.15s ease;
   border-bottom: 1px solid #21262d0a;
+  border-left: 3px solid transparent;
 }
 
-.snippet-item:hover {
-  background: #161b22;
-}
-
-.snippet-item:active {
+/* Hover (enabled rows only) and keyboard highlight share the accent style */
+.snippet-item:not(.disabled):hover,
+.snippet-item.highlighted {
   background: #21262d;
+  border-left-color: #58a6ff;
 }
 
+.snippet-item:not(.disabled):active {
+  background: #30363d;
+}
+
+/* No pointer-events:none here: disabled rows have no click handler anyway, and
+   blocking pointer events would also suppress the why-disabled title tooltip. */
 .snippet-item.disabled {
   opacity: 0.35;
   cursor: default;
-  pointer-events: none;
 }
 
 .snippet-name {
