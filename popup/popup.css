@@ -70,6 +70,85 @@ body {
   color: #f85149;
 }
 
+.copy-menu {
+  position: relative;
+}
+
+/* Invisible hit-area extending left of the icon, so the dropdown doesn't
+   close just because the mouse drifts slightly left of a fairly narrow
+   button. A pseudo-element still counts as "inside" .copy-menu for :hover
+   purposes, so it widens the hover zone without changing the icon's size
+   or its own visible hover-highlight box. */
+.copy-menu::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -12px;
+  width: 12px;
+}
+
+.copy-menu-panel {
+  display: none;
+  position: absolute;
+  top: 100%;
+  right: 0;
+  z-index: 10;
+  min-width: 190px;
+  padding: 4px;
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+
+/* Hover opens it instantly (no click needed); .open (toggled by a click on
+   the icon) is a fallback for touch/keyboard use where hover isn't available. */
+.copy-menu:hover .copy-menu-panel,
+.copy-menu.open .copy-menu-panel {
+  display: block;
+}
+
+.copy-menu-label {
+  padding: 6px 10px 4px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #8b949e;
+  border-bottom: 1px solid #21262d;
+  margin-bottom: 2px;
+}
+
+.copy-menu-separator {
+  height: 1px;
+  margin: 4px 6px;
+  background: #30363d;
+}
+
+.copy-menu-item {
+  display: block;
+  width: 100%;
+  padding: 7px 10px;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  color: #e6edf3;
+  font-family: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.copy-menu-item:hover {
+  background: #21262d;
+}
+
+.copy-menu-item:active {
+  background: #30363d;
+}
+
 #snippet-list {
   padding: 4px 0;
 }

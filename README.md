@@ -17,6 +17,7 @@ Personal-use tool. Not published to the Chrome Web Store.
 - **CSP bypass** — executes via `chrome.debugger`, working on strict sites like YouTube
 - **Dark theme** management page with resizable sidebar and line numbers
 - **16 default snippets** pre-loaded from [CaptainCodeAU/devtools-snippets](https://github.com/CaptainCodeAU/devtools-snippets)
+- **Export Open Tabs** — copy or download every open tab's URLs, grouped by window, as plain text or a markdown table with verified favicons
 
 ## Installation
 
@@ -35,6 +36,7 @@ Personal-use tool. Not published to the Chrome Web Store.
 | Reorder snippets | Drag snippets up/down in the manager sidebar |
 | Import snippets | Click **Import** in the manager toolbar, select a JSON file |
 | Export snippets | Click **Export** in the manager toolbar |
+| Export open tabs | Hover (or click) the popup's export icon, or right-click the toolbar icon — pick Download/Copy × Markdown/Text |
 
 ### URL Patterns
 
@@ -59,8 +61,10 @@ When a snippet executes, Chrome briefly shows a "started debugging this browser"
 ```
 trigger-code-snippets/
 ├── manifest.json          # MV3 manifest
-├── background.js          # Service worker: execution, context menus, messaging
+├── background.js          # Service worker: execution, context menus, messaging,
+│                          # Export Open Tabs
 ├── content.js             # Keyboard shortcut listener (Alt+Shift+1-9)
+├── offscreen.html / .js   # Clipboard writes (service workers can't touch it)
 ├── shared/
 │   └── storage.js         # Storage CRUD, URL matching, import/export
 ├── popup/

@@ -1,6 +1,6 @@
 # trigger-code-snippets
 
-> **Status: As-built.** This document describes the shipped **v1.0.0** implementation and was verified against the source on 2026-05-30 — the code matches this spec apart from the minor, explicitly-marked notes inline below. The **"Future Considerations (v2+)"** section is a roadmap and is **not** yet implemented.
+> **Status: As-built.** This document describes the shipped **v1.3.0** implementation and was verified against the source on 2026-09-11 — the code matches this spec apart from the minor, explicitly-marked notes inline below. The **"Future Considerations (v2+)"** section is a roadmap and is **not** yet implemented.
 
 ## Overview
 
@@ -39,7 +39,8 @@ Personal-use tool. Chrome only. No publishing to the Chrome Web Store.
 - Snippets matching the current page URL are **clickable** — clicking one executes it immediately.
 - Non-matching snippets are **greyed out** (disabled, `pointer-events: none`, reduced opacity).
 - An empty state shows a link to open the manager page.
-- The popup is dark themed (320px wide, max 480px tall, scrollable).
+- The popup is dark themed (380px wide, max 560px tall, scrollable).
+- Header also has an **Export Open Tabs** icon and a **Settings** icon — see [§9](#9-export-open-tabs-toolbar-popup-icon) for the former.
 
 ### 4. Right-Click Context Menu (On Web Page)
 
@@ -91,6 +92,21 @@ Personal-use tool. Chrome only. No publishing to the Chrome Web Store.
   - Prime Video (`*://*.primevideo.com/*`, `*://*.amazon.com/*`): Playback Speed.
   - YouTube (`*://*.youtube.com/*`): Playback Speed.
 - Defaults are **only loaded on first install** — reloading or updating the extension does not overwrite existing snippets. A `initialized` flag in `chrome.storage.local` prevents re-loading.
+
+### 9. Export Open Tabs (Toolbar Popup Icon)
+
+- A dedicated icon in the popup header (left of the settings gear) opens a **hover-triggered dropdown** — no click needed, though clicking also toggles it as a touch/keyboard fallback. A small invisible zone extends the hover area to the icon's left, so the dropdown doesn't close from a mouse drifting slightly off a fairly narrow button.
+- The dropdown is grouped by action rather than spelling out every combination: a **Download** header (Markdown, Text), a separator, then a **Copy** header (Markdown, Text).
+- Right-clicking the toolbar icon offers the same 4 choices, via a native nested context-menu submenu with the same Download/Copy grouping.
+- **Text**: tabs grouped by browser window (`Window N (X tabs):`), one URL per line, no titles.
+- **Markdown** (same content for both Copy and Download — they only differ in where the result goes): grouped by window (`## Window N (X tabs)`), each window a table with columns **Index | Icon | Title | URL | Flags**.
+  - **Icon** is the tab's real favicon as a markdown image, wrapped in `<>` (CommonMark's link-destination syntax that allows spaces — some sites' inline-SVG favicons contain literal spaces, which breaks plain `![]()` syntax and prints as visible text instead of an image). A favicon is only referenced once a live HEAD request confirms it actually returns image content; a favicon repeated across many tabs is written once as a shared markdown reference link (`![icon][fav1]`) instead of duplicated per row — some sites' favicons run to 100KB+.
+  - Falls back to an emoji when a real favicon doesn't apply or shouldn't be probed: 🧩 `chrome-extension://` tabs, 💾 `file://` tabs, 🖥️ tabs on a bare IP address (deliberately not probed — guessing there would mean the extension fetching an arbitrary network address on its own), ⚙️ internal `chrome://` pages, 🌐 a favicon was attempted but nothing loaded.
+  - If Chrome reports no favicon at all, the extension guesses the tab's **registrable domain's** `/favicon.ico` (strips any subdomain, e.g. `docs.nvidia.com` → `nvidia.com`, since a subdomain rarely hosts its own icon) and verifies it the same way before using it.
+  - **Flags** lists only the tab states currently true, from: `active`, `pinned`, `incognito`, `discarded`, `frozen`.
+  - The Icon column is center-aligned (`:---:`) so an emoji sits where a real image would.
+- **Copy** writes the text to the clipboard via the offscreen document (service workers have no clipboard access). **Download** saves it as a dated file (`tab-urls-YYYY-MM-DD.txt` / `.md`) via `chrome.downloads.download()` with a `data:` URL — a `blob:` URL created in a service worker isn't reliably fetchable by the downloads API. `saveAs` is left unset, so it follows the user's own Chrome "ask where to save" setting rather than forcing a dialog either way.
+- Uses `chrome.tabs.query({})` in spanning mode, so every open window is covered, incognito included.
 
 ---
 
@@ -148,7 +164,7 @@ Personal-use tool. Chrome only. No publishing to the Chrome Web Store.
 ### Manifest
 
 - **Manifest V3**.
-- Permissions: `activeTab`, `scripting`, `contextMenus`, `storage`, `debugger`. *Note: `scripting` is declared but currently unused — all execution goes through `chrome.debugger` (see Architecture Notes). The permission is vestigial and could be removed.*
+- Permissions (partial list — the manifest declares a broader pre-loaded set, see the project's own `CLAUDE.md`): `activeTab`, `scripting`, `contextMenus`, `storage`, `debugger`, `downloads`, `offscreen`, `tabs`. *Note: `scripting` is declared but currently unused — all execution goes through `chrome.debugger` (see Architecture Notes). `downloads` and `offscreen` are used by Export Open Tabs ([§9](#9-export-open-tabs-toolbar-popup-icon)) — downloading a file and writing to the clipboard, respectively.*
 - Host permissions: `<all_urls>`.
 - Background: **module** service worker (`background.js`).
 - Content scripts: `content.js` on `<all_urls>` at `document_start`.
@@ -181,9 +197,13 @@ trigger-code-snippets/
 ├── manifest.json
 ├── background.js          # Service worker (ES module): handles context menus,
 │                          # debugger-based script execution, message routing,
-│                          # first-install defaults, storage change listeners
+│                          # first-install defaults, storage change listeners,
+│                          # Export Open Tabs (favicon resolution, text/markdown
+│                          # formatting, clipboard write, file download)
 ├── content.js             # Content script (IIFE): listens for Alt+Shift+1-9
 │                          # keydown events, sends messages to background
+├── offscreen.html         # Offscreen document (clipboard writes only --
+├── offscreen.js           # service workers have no clipboard access)
 ├── shared/
 │   └── storage.js         # ES module: CRUD operations, URL pattern matching
 │                          # (match pattern → RegExp), import/export with
@@ -191,7 +211,8 @@ trigger-code-snippets/
 ├── popup/
 │   ├── popup.html         # Toolbar popup page
 │   ├── popup.css          # Dark theme popup styles
-│   └── popup.js           # ES module: lists snippets, click-to-execute
+│   └── popup.js           # ES module: lists snippets, click-to-execute,
+│                          # wires the Export Open Tabs dropdown
 ├── manager/
 │   ├── manager.html       # Full-tab management/options page
 │   ├── manager.css        # Dark theme styles with CSS custom properties

@@ -8,26 +8,38 @@ async function init() {
     window.close();
   });
 
-  // Copy-URLs icon -> ask the service worker to copy every open tab's URL to the
-  // clipboard (same action as the toolbar-icon menu), with brief inline feedback.
+  // Copy/download menu -> hovering the icon reveals 4 choices (Copy/Download
+  // x Text/Markdown); each asks the service worker to build + deliver the tab
+  // list, with brief inline feedback on the trigger icon.
+  const copyMenu = document.querySelector('.copy-menu');
   const copyBtn = document.getElementById('copy-urls-btn');
-  copyBtn.addEventListener('click', async () => {
-    copyBtn.disabled = true;
-    let ok = false;
-    try {
-      const resp = await chrome.runtime.sendMessage({ type: 'copy-all-tab-urls' });
-      ok = !!(resp && resp.ok);
-    } catch {
-      ok = false;
-    }
-    copyBtn.disabled = false;
-    copyBtn.classList.toggle('done', ok);
-    copyBtn.classList.toggle('failed', !ok);
-    copyBtn.title = ok ? 'Copied!' : 'Copy failed';
-    setTimeout(() => {
-      copyBtn.classList.remove('done', 'failed');
-      copyBtn.title = 'Copy all tab URLs to clipboard';
-    }, 1400);
+
+  // Click is a fallback for touch/keyboard use, since :hover alone needs a
+  // pointing device that can hover.
+  copyBtn.addEventListener('click', () => copyMenu.classList.toggle('open'));
+  document.addEventListener('click', (e) => {
+    if (!copyMenu.contains(e.target)) copyMenu.classList.remove('open');
+  });
+
+  document.querySelectorAll('.copy-menu-item').forEach((item) => {
+    item.addEventListener('click', async () => {
+      copyMenu.classList.remove('open');
+      const { action, format } = item.dataset;
+      let ok = false;
+      try {
+        const resp = await chrome.runtime.sendMessage({ type: 'tab-urls-action', action, format });
+        ok = !!(resp && resp.ok);
+      } catch {
+        ok = false;
+      }
+      copyBtn.classList.toggle('done', ok);
+      copyBtn.classList.toggle('failed', !ok);
+      copyBtn.title = ok ? 'Done!' : 'Failed';
+      setTimeout(() => {
+        copyBtn.classList.remove('done', 'failed');
+        copyBtn.title = 'Copy or download all tab URLs';
+      }, 1400);
+    });
   });
 
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
