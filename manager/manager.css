@@ -799,6 +799,54 @@ textarea {
   font-size: 14px;
 }
 
+/* Style ignores the Fields picker for a fixed-shape style (e.g. Numbered
+   Links is always Title+URL) -- dimmed rather than hidden so it's clear
+   the list still reflects what would show if the style allowed picking. */
+.field-list-disabled {
+  opacity: 0.45;
+}
+
+.fields-hint {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.link-btn:disabled {
+  color: var(--text-secondary);
+  cursor: default;
+  text-decoration: none;
+}
+
+.style-select {
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-family: var(--font-sans);
+  cursor: pointer;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-primary);
+  cursor: pointer;
+  user-select: none;
+}
+
+.checkbox-label input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--format-accent);
+  cursor: pointer;
+}
+
 .export-preview-section {
   margin-bottom: 0;
 }

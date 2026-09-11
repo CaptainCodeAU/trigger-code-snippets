@@ -4,7 +4,7 @@ import {
   importSnippets as doImport, validateImportSchema,
   getExportSettings, saveExportSettings, DEFAULT_EXPORT_SETTINGS
 } from '../shared/storage.js';
-import { FIELD_IDS, FIELD_LABELS, TEXT_FIELD_IDS, renderExport } from '../shared/tabExportFormat.js';
+import { FIELD_IDS, FIELD_LABELS, TEXT_FIELD_IDS, MARKDOWN_STYLES, renderExport } from '../shared/tabExportFormat.js';
 
 // ===== State =====
 let snippets = [];
@@ -458,19 +458,21 @@ function showExportSettingsDialog() {
           <div class="export-settings-section">
             <label class="section-title">Fields <span class="label-hint">Drag to reorder, uncheck to hide ( <button type="button" class="link-btn" id="export-reset-defaults">default</button> · <button type="button" class="link-btn" id="export-select-all">select all</button> · <button type="button" class="link-btn" id="export-clear-fields">clear</button> )</span></label>
             <div class="field-list" id="export-field-list"></div>
+            <p class="fields-hint" id="export-fields-hint" hidden></p>
           </div>
         </div>
 
         <div class="export-settings-column">
-          <div class="export-settings-section" id="export-layout-section">
-            <label class="section-title">Layout</label>
-            <div class="toggle-btn-group" id="export-layout-group">
-              <button type="button" class="toggle-option-btn" data-value="table">Table</button>
-              <button type="button" class="toggle-option-btn" data-value="list">List</button>
-            </div>
+          <div class="export-settings-section" id="export-style-section">
+            <label class="section-title">Style</label>
+            <select class="style-select" id="export-style-select"></select>
           </div>
 
-          <div class="export-settings-section">
+          <div class="export-settings-section" id="export-collapsible-section">
+            <label class="checkbox-label"><input type="checkbox" id="export-collapsible-toggle"> Collapsible windows</label>
+          </div>
+
+          <div class="export-settings-section" id="export-orientation-section">
             <label class="section-title">Orientation</label>
             <div class="toggle-btn-group" id="export-orientation-group">
               <button type="button" class="toggle-option-btn" data-value="normal">Compact</button>
@@ -489,14 +491,35 @@ function showExportSettingsDialog() {
   document.body.appendChild(overlay);
 
   const fieldListEl = overlay.querySelector('#export-field-list');
-  const layoutSectionEl = overlay.querySelector('#export-layout-section');
-  const layoutGroupEl = overlay.querySelector('#export-layout-group');
+  const fieldsHintEl = overlay.querySelector('#export-fields-hint');
+  const styleSectionEl = overlay.querySelector('#export-style-section');
+  const styleSelectEl = overlay.querySelector('#export-style-select');
+  const collapsibleSectionEl = overlay.querySelector('#export-collapsible-section');
+  const collapsibleToggleEl = overlay.querySelector('#export-collapsible-toggle');
+  const orientationSectionEl = overlay.querySelector('#export-orientation-section');
   const orientationGroupEl = overlay.querySelector('#export-orientation-group');
   const formatGroupEl = overlay.querySelector('#export-format-group');
   const previewEl = overlay.querySelector('#export-preview');
   const selectAllBtn = overlay.querySelector('#export-select-all');
   const clearFieldsBtn = overlay.querySelector('#export-clear-fields');
   const resetBtn = overlay.querySelector('#export-reset-defaults');
+
+  MARKDOWN_STYLES.forEach((s) => {
+    const option = document.createElement('option');
+    option.value = s.id;
+    option.textContent = s.label;
+    styleSelectEl.appendChild(option);
+  });
+
+  // null when the fields picker is free to use (the two table styles, or
+  // whenever the Text subview is open); an array (the style's fixedFields)
+  // when the current style ignores the field picker entirely -- used to grey
+  // out Fields for styles like Numbered Links that are always Title+URL.
+  function currentStyleFixedFields() {
+    if (currentSubview !== 'markdown') return null;
+    const meta = MARKDOWN_STYLES.find((s) => s.id === exportSettings.markdown.style);
+    return meta?.fixedFields || null;
+  }
 
   function scheduleExportSettingsSave() {
     updateSaveIndicator('saving');
@@ -527,14 +550,16 @@ function showExportSettingsDialog() {
 
   function renderFieldList() {
     const selected = exportSettings[currentSubview].fields;
+    const fixed = currentStyleFixedFields();
 
+    fieldListEl.classList.toggle('field-list-disabled', !!fixed);
     fieldListEl.innerHTML = '';
     fieldOrder.forEach((fieldId, index) => {
       const item = document.createElement('div');
       item.className = 'field-item';
       item.dataset.fieldId = fieldId;
       item.dataset.index = index;
-      item.draggable = true;
+      item.draggable = !fixed;
 
       const handle = document.createElement('span');
       handle.className = 'drag-handle';
@@ -544,6 +569,7 @@ function showExportSettingsDialog() {
       const checkbox = document.createElement('input');
       checkbox.type = 'checkbox';
       checkbox.checked = selected.includes(fieldId);
+      checkbox.disabled = !!fixed;
       checkbox.addEventListener('change', () => toggleField(fieldId, checkbox));
       item.appendChild(checkbox);
 
@@ -560,17 +586,29 @@ function showExportSettingsDialog() {
 
       fieldListEl.appendChild(item);
     });
+
+    selectAllBtn.disabled = !!fixed;
+    clearFieldsBtn.disabled = !!fixed;
+    fieldsHintEl.hidden = !fixed;
+    if (fixed) fieldsHintEl.textContent = `This style always shows ${fixed.map((f) => FIELD_LABELS[f]).join(' + ')}.`;
   }
 
   function renderControls() {
     const settings = exportSettings[currentSubview];
-    layoutSectionEl.style.display = currentSubview === 'markdown' ? '' : 'none';
-    layoutGroupEl.querySelectorAll('.toggle-option-btn').forEach((btn) => {
-      btn.classList.toggle('active', btn.dataset.value === settings.layout);
-    });
-    orientationGroupEl.querySelectorAll('.toggle-option-btn').forEach((btn) => {
-      btn.classList.toggle('active', btn.dataset.value === settings.orientation);
-    });
+    const isMarkdown = currentSubview === 'markdown';
+
+    styleSectionEl.style.display = isMarkdown ? '' : 'none';
+    collapsibleSectionEl.style.display = isMarkdown ? '' : 'none';
+    orientationSectionEl.style.display = isMarkdown ? 'none' : '';
+
+    if (isMarkdown) {
+      styleSelectEl.value = settings.style;
+      collapsibleToggleEl.checked = settings.collapsible;
+    } else {
+      orientationGroupEl.querySelectorAll('.toggle-option-btn').forEach((btn) => {
+        btn.classList.toggle('active', btn.dataset.value === settings.orientation);
+      });
+    }
   }
 
   function toggleField(fieldId, checkbox) {
@@ -656,11 +694,19 @@ function showExportSettingsDialog() {
     updatePreview();
   });
 
-  layoutGroupEl.addEventListener('click', (e) => {
-    const btn = e.target.closest('.toggle-option-btn');
-    if (!btn) return;
-    exportSettings.markdown.layout = btn.dataset.value;
-    renderControls();
+  styleSelectEl.addEventListener('change', () => {
+    exportSettings.markdown.style = styleSelectEl.value;
+    // The old field order/selection may include ids the new style ignores
+    // (or drop ids a fixed style always shows) -- reseed from scratch so
+    // the Fields list always reflects what's actually about to render.
+    seedFieldOrder();
+    renderFieldList();
+    updatePreview();
+    scheduleExportSettingsSave();
+  });
+
+  collapsibleToggleEl.addEventListener('change', () => {
+    exportSettings.markdown.collapsible = collapsibleToggleEl.checked;
     updatePreview();
     scheduleExportSettingsSave();
   });

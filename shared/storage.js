@@ -1,7 +1,7 @@
 // Storage utilities for Trigger Code Snippets
 // Used by background.js, popup.js, and manager.js (ES module)
 
-import { FIELD_IDS, TEXT_FIELD_IDS } from './tabExportFormat.js';
+import { FIELD_IDS, TEXT_FIELD_IDS, MARKDOWN_STYLE_IDS } from './tabExportFormat.js';
 
 export async function getSnippets() {
   const { snippets = [] } = await chrome.storage.local.get('snippets');
@@ -171,8 +171,8 @@ export function validateImportSchema(data) {
 export const DEFAULT_EXPORT_SETTINGS = {
   markdown: {
     fields: ['index', 'icon', 'title', 'url'],
-    layout: 'table',
-    orientation: 'normal'
+    style: 'table-grid',
+    collapsible: false
   },
   text: {
     fields: ['url'],
@@ -199,15 +199,32 @@ function sanitizeChoice(value, allowedValues, fallback) {
   return allowedValues.includes(value) ? value : fallback;
 }
 
+// One-time shape migration for settings saved by the pre-Style-gallery
+// build (v1.4.0 and earlier): { layout, orientation } -> the closest new
+// { style }. table+normal and table+transposed map onto the two styles that
+// still exist; the old free-field "list" layout has no exact equivalent
+// now that every markdown shape is its own named style, so it lands on
+// Bulleted Links as the closest one-line-per-tab style.
+function migrateMarkdownSettings(saved) {
+  if (!saved || saved.style || !saved.layout) return saved;
+  const { layout, orientation, ...rest } = saved;
+  const style = layout === 'table'
+    ? (orientation === 'transposed' ? 'table-card' : 'table-grid')
+    : 'bulleted-links';
+  return { ...rest, style };
+}
+
 function mergeExportSettings(saved) {
   const merged = {
-    markdown: { ...DEFAULT_EXPORT_SETTINGS.markdown, ...(saved?.markdown || {}) },
+    markdown: { ...DEFAULT_EXPORT_SETTINGS.markdown, ...(migrateMarkdownSettings(saved?.markdown) || {}) },
     text: { ...DEFAULT_EXPORT_SETTINGS.text, ...(saved?.text || {}) }
   };
   merged.markdown.fields = sanitizeFields(merged.markdown.fields, FIELD_IDS, DEFAULT_EXPORT_SETTINGS.markdown.fields);
+  merged.markdown.style = sanitizeChoice(merged.markdown.style, MARKDOWN_STYLE_IDS, DEFAULT_EXPORT_SETTINGS.markdown.style);
+  merged.markdown.collapsible = typeof merged.markdown.collapsible === 'boolean'
+    ? merged.markdown.collapsible
+    : DEFAULT_EXPORT_SETTINGS.markdown.collapsible;
   merged.text.fields = sanitizeFields(merged.text.fields, TEXT_FIELD_IDS, DEFAULT_EXPORT_SETTINGS.text.fields);
-  merged.markdown.layout = sanitizeChoice(merged.markdown.layout, ['table', 'list'], DEFAULT_EXPORT_SETTINGS.markdown.layout);
-  merged.markdown.orientation = sanitizeChoice(merged.markdown.orientation, ['normal', 'transposed'], DEFAULT_EXPORT_SETTINGS.markdown.orientation);
   merged.text.orientation = sanitizeChoice(merged.text.orientation, ['normal', 'transposed'], DEFAULT_EXPORT_SETTINGS.text.orientation);
   return merged;
 }
@@ -217,21 +234,28 @@ export async function getExportSettings() {
   return mergeExportSettings(exportSettings);
 }
 
-function isValidExportFormatSettings(settings, allowedFieldIds) {
+function isValidFieldSelection(fields, allowedFieldIds) {
+  return Array.isArray(fields) && fields.length > 0 && fields.every((f) => allowedFieldIds.includes(f));
+}
+
+function isValidMarkdownSettings(settings) {
   if (!settings || typeof settings !== 'object') return false;
-  const { fields, layout, orientation } = settings;
-  if (!Array.isArray(fields) || fields.length === 0) return false;
-  if (!fields.every(f => allowedFieldIds.includes(f))) return false;
-  if (layout !== undefined && layout !== 'table' && layout !== 'list') return false;
-  if (orientation !== 'normal' && orientation !== 'transposed') return false;
-  return true;
+  if (!isValidFieldSelection(settings.fields, FIELD_IDS)) return false;
+  if (!MARKDOWN_STYLE_IDS.includes(settings.style)) return false;
+  return typeof settings.collapsible === 'boolean';
+}
+
+function isValidTextSettings(settings) {
+  if (!settings || typeof settings !== 'object') return false;
+  if (!isValidFieldSelection(settings.fields, TEXT_FIELD_IDS)) return false;
+  return settings.orientation === 'normal' || settings.orientation === 'transposed';
 }
 
 export async function saveExportSettings(settings) {
-  if (!isValidExportFormatSettings(settings.markdown, FIELD_IDS)) {
+  if (!isValidMarkdownSettings(settings.markdown)) {
     throw new Error('Invalid markdown export settings');
   }
-  if (!isValidExportFormatSettings(settings.text, TEXT_FIELD_IDS)) {
+  if (!isValidTextSettings(settings.text)) {
     throw new Error('Invalid text export settings');
   }
   await chrome.storage.local.set({ exportSettings: settings });

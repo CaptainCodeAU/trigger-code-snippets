@@ -1,6 +1,6 @@
 # trigger-code-snippets
 
-> **Status: As-built.** This document describes the shipped **v1.3.0** implementation and was verified against the source on 2026-09-11 — the code matches this spec apart from the minor, explicitly-marked notes inline below. The **"Future Considerations (v2+)"** section is a roadmap and is **not** yet implemented.
+> **Status: As-built.** This document describes the shipped **v1.5.0** implementation and was verified against the source on 2026-09-11 — the code matches this spec apart from the minor, explicitly-marked notes inline below. The **"Future Considerations (v2+)"** section is a roadmap and is **not** yet implemented.
 
 ## Overview
 
@@ -99,12 +99,12 @@ Personal-use tool. Chrome only. No publishing to the Chrome Web Store.
 - The dropdown is grouped by action rather than spelling out every combination: a **Download** header (Markdown, Text), a separator, then a **Copy** header (Markdown, Text).
 - Right-clicking the toolbar icon offers the same 4 choices, via a native nested context-menu submenu with the same Download/Copy grouping.
 - **Text**: tabs grouped by browser window (`Window N (X tabs):`). Shape depends on the **Tab URLs Settings** panel (below) — the shipped default is a URL-only, one-line-per-tab list, matching the extension's original behavior.
-- **Markdown** (same content for both Copy and Download — they only differ in where the result goes): grouped by window (`## Window N (X tabs)`). Shape (which fields, their order, table vs. list, one-row-per-tab vs. one-block-per-tab) is configurable via **Tab URLs Settings**; the shipped default is a table with columns **Index | Icon | Title | URL**.
-  - **Icon** is the tab's real favicon as a markdown image, wrapped in `<>` (CommonMark's link-destination syntax that allows spaces — some sites' inline-SVG favicons contain literal spaces, which breaks plain `![]()` syntax and prints as visible text instead of an image). A favicon is only referenced once a live HEAD request confirms it actually returns image content; a favicon repeated across many tabs is written once as a shared markdown reference link (`![icon][fav1]`) instead of duplicated per row — some sites' favicons run to 100KB+. The favicon network check only runs when the Icon field is actually enabled, and only for Markdown (Text can't show a real image, so Icon isn't offered there).
+- **Markdown** (same content for both Copy and Download — they only differ in where the result goes): grouped by window (`## Window N (X tabs)`, or a `<details><summary>` block when Collapsible is on). Shape is one of 10 named **Styles**, configurable via **Tab URLs Settings**; the shipped default is the **Table (Grid)** style with columns **Index | Icon | Title | URL**.
+  - **Icon** is the tab's real favicon as a markdown image, wrapped in `<>` (CommonMark's link-destination syntax that allows spaces — some sites' inline-SVG favicons contain literal spaces, which breaks plain `![]()` syntax and prints as visible text instead of an image). A favicon is only referenced once a live HEAD request confirms it actually returns image content; a favicon repeated across many tabs is written once as a shared markdown reference link (`![icon][fav1]`) instead of duplicated per row — some sites' favicons run to 100KB+. The favicon network check only runs when the Icon field is actually enabled **and** the active Style actually uses it (only the two Table styles do — every other style is fixed to Title+URL or URL alone).
   - Falls back to an emoji when a real favicon doesn't apply or shouldn't be probed: 🧩 `chrome-extension://` tabs, 💾 `file://` tabs, 🖥️ tabs on a bare IP address (deliberately not probed — guessing there would mean the extension fetching an arbitrary network address on its own), ⚙️ internal `chrome://` pages, 🌐 a favicon was attempted but nothing loaded.
   - If Chrome reports no favicon at all, the extension guesses the tab's **registrable domain's** `/favicon.ico` (strips any subdomain, e.g. `docs.nvidia.com` → `nvidia.com`, since a subdomain rarely hosts its own icon) and verifies it the same way before using it.
   - When a table's Icon column is enabled it's center-aligned (`:---:`) so an emoji sits where a real image would.
-  - A literal `|` in a field's value (a tab title, say) is backslash-escaped in every markdown layout (table and list) so it can never be mistaken for column/field syntax; Text output has no such escaping since it isn't markdown.
+  - A literal `|` in a field's value (a tab title, say) is backslash-escaped in the two Table styles so it can never be mistaken for column/field syntax; a literal `[` or `]` in a title is backslash-escaped in the three link-based styles (Numbered Links, Bulleted Links, Checklist) so it can't be mistaken for markdown link syntax. Text output has no such escaping since it isn't markdown.
 - **Copy** writes the text to the clipboard via the offscreen document (service workers have no clipboard access). **Download** saves it as a dated file (`tab-urls-YYYY-MM-DD.txt` / `.md`) via `chrome.downloads.download()` with a `data:` URL — a `blob:` URL created in a service worker isn't reliably fetchable by the downloads API. `saveAs` is left unset, so it follows the user's own Chrome "ask where to save" setting rather than forcing a dialog either way.
 - Uses `chrome.tabs.query({})` in spanning mode, so every open window is covered, incognito included.
 
@@ -113,11 +113,20 @@ Personal-use tool. Chrome only. No publishing to the Chrome Web Store.
 - A teal, icon-labeled toolbar button on the management page opens a modal that controls exactly what §9's Copy/Download output looks like, separately for Markdown and Text (a button-style Markdown/Text switch at the top of the modal).
 - **Fields**: a checkbox + drag-to-reorder list (same drag mechanics as the snippet sidebar). Checked = included in the output, in the order shown; unchecking never changes any row's position — only the drag handle reorders. `( default · select all · clear )` inline shortcuts: reset this format back to its shipped default, check every field, or clear down to just URL. At least one field must always stay checked. The list itself scrolls (capped height) so it stays compact as fields are added.
 - Available fields: Index (1-based — this is for a person counting tabs, not code indexing an array), Icon (Markdown only), Title, URL, Flags (`active`/`pinned`/`incognito`/`discarded`/`frozen` combined into one column), Window, Status, Audible, Tab ID, Discarded, Active. Only Index/Icon/Title/URL/Flags ship checked by default (Icon/Flags excepted — Markdown's shipped default is Index/Icon/Title/URL, Text's is URL only); everything else ships unchecked.
-- **Layout** (Markdown only — Text has no table concept): **Table** (today's default shape) or **List** (bullet-style, no table syntax).
-- **Orientation** (both formats): **Compact** (all chosen fields together on one row/line per tab) or **Expanded** (each tab becomes its own multi-line "Field: Value" block — a 2-column Field/Value mini-table in Markdown's Table layout, a Field/Value line list otherwise).
+- **Style** (Markdown only — replaces the old Layout/Orientation pair): a 10-entry gallery, `shared/tabExportFormat.js`'s `MARKDOWN_STYLES`. Two are free-field tables; the other eight are fixed-shape and ignore the Fields picker entirely (the checklist greys out with an inline note naming the fields that style always shows):
+  - **Table (Grid)** *(default)* — one row per tab, columns = chosen fields.
+  - **Table (Card)** — each tab its own 2-column Field/Value mini-table (the old "Expanded" orientation).
+  - **Numbered Links** / **Bulleted Links** / **Checklist** — `1. [Title](URL)` / `- [Title](URL)` / `- [ ] [Title](URL)`. Fixed to Title+URL.
+  - **Title + Indented URL** — `1. Title -` then the URL indented on its own line. Fixed to Title+URL.
+  - **Bare URLs** — just the URL, blank-line separated, no title at all. Fixed to URL only.
+  - **Title — URL** — `- Title — https://…`, one line, em-dash separator, no markdown link syntax. Fixed to Title+URL.
+  - **Blockquote** — `**Title**` then `> URL` on the next line. Fixed to Title+URL.
+  - **Heading per Tab** — `### N. Title` then the URL on the next line. Fixed to Title+URL.
+- **Collapsible windows** (Markdown only, a checkbox, works with every Style): wraps each window's block in `<details><summary>Window N (X tabs)</summary>…</details>` instead of a `## ` heading, so it renders folded-shut on GitHub/GFM viewers until clicked open.
+- **Orientation** (Text only — Markdown's shape variation is entirely in Style now): **Compact** (all chosen fields together on one line per tab) or **Expanded** (each tab becomes its own multi-line "Field: Value" block).
 - **Preview**: a live, raw-text rendering of the current settings against a fixed set of generic sample tabs (not the user's real open tabs) — same `renderExport()` code path as the real export, so it can't drift out of sync.
 - Autosaves exactly like snippet edits (800ms debounce, "Auto-saved ✓" indicator) into a new `exportSettings` storage key. No import/export for this settings blob.
-- A field id that's no longer valid (removed in a later version, e.g. `muted` was cut after shipping) is silently dropped from saved settings on every read, rather than lingering as a checked-but-blank row.
+- A field id that's no longer valid (removed in a later version, e.g. `muted` was cut after shipping) is silently dropped from saved settings on every read, rather than lingering as a checked-but-blank row. Settings saved by the pre-Style-gallery build (v1.4.x and earlier, `{ layout, orientation }`) migrate automatically on first read: Table+Compact → Table (Grid), Table+Expanded → Table (Card), the old free-field List layout → Bulleted Links (the closest one-line-per-tab equivalent, since every markdown shape is now its own named style rather than a field-agnostic layout).
 
 ---
 
@@ -199,7 +208,7 @@ Personal-use tool. Chrome only. No publishing to the Chrome Web Store.
   ],
   "initialized": true,
   "exportSettings": {
-    "markdown": { "fields": ["index", "icon", "title", "url"], "layout": "table", "orientation": "normal" },
+    "markdown": { "fields": ["index", "icon", "title", "url"], "style": "table-grid", "collapsible": false },
     "text": { "fields": ["url"], "orientation": "normal" }
   }
 }
@@ -224,9 +233,9 @@ trigger-code-snippets/
 │   │                      # (match pattern → RegExp), import/export with
 │   │                      # deduplication, schema validation, tab-URL export
 │   │                      # settings get/save (with stale-field sanitizing)
-│   └── tabExportFormat.js # ES module, no chrome.* calls: pure field registry
-│                          # + renderExport() -- table/list x compact/expanded
-│                          # rendering shared by background.js (real export)
+│   └── tabExportFormat.js # ES module, no chrome.* calls: field registry, the
+│                          # 10-entry MARKDOWN_STYLES gallery, and renderExport()
+│                          # -- rendering shared by background.js (real export)
 │                          # and manager.js (settings-panel live preview)
 ├── popup/
 │   ├── popup.html         # Toolbar popup page

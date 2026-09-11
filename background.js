@@ -2,7 +2,7 @@ import {
   getSnippets, saveSnippets, getSnippetById,
   matchUrl, isInitialized, setInitialized, getExportSettings
 } from './shared/storage.js';
-import { renderExport } from './shared/tabExportFormat.js';
+import { renderExport, markdownStyleUsesIcon } from './shared/tabExportFormat.js';
 
 // Shared by the popup's dropdown (message-based) and the toolbar-icon
 // right-click submenu (context-menu-based) so both offer the same 4 choices.
@@ -290,9 +290,10 @@ async function buildTabUrlText(format) {
 
   // Only pay for the favicon network round-trips when Icon is actually
   // configured to show -- a real win for any export that leaves it out
-  // (every Text export, since Icon is Markdown-only; or a Markdown export
-  // with Icon unchecked).
-  if (format === 'markdown' && formatSettings.fields.includes('icon')) {
+  // (every Text export, since Icon is Markdown-only; a Markdown export with
+  // Icon unchecked; or a Markdown style that ignores Icon entirely, like
+  // Numbered Links).
+  if (format === 'markdown' && formatSettings.fields.includes('icon') && markdownStyleUsesIcon(formatSettings.style)) {
     groups = await attachResolvedIcons(groups);
   }
 

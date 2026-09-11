@@ -18,7 +18,7 @@ Personal-use tool. Not published to the Chrome Web Store.
 - **Dark theme** management page with resizable sidebar and line numbers
 - **16 default snippets** pre-loaded from [CaptainCodeAU/devtools-snippets](https://github.com/CaptainCodeAU/devtools-snippets)
 - **Export Open Tabs** — copy or download every open tab's URLs, grouped by window, as plain text or markdown
-- **Tab URLs Settings** — configure exactly what that export looks like: which fields, their order, table vs. list, compact vs. expanded, with a live preview
+- **Tab URLs Settings** — configure exactly what that export looks like: a 10-style Markdown gallery (tables, link lists, checklist, blockquote, and more, each collapsible), or Text's fields/compact-expanded, with a live preview
 
 ## Installation
 
