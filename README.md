@@ -17,7 +17,8 @@ Personal-use tool. Not published to the Chrome Web Store.
 - **CSP bypass** — executes via `chrome.debugger`, working on strict sites like YouTube
 - **Dark theme** management page with resizable sidebar and line numbers
 - **16 default snippets** pre-loaded from [CaptainCodeAU/devtools-snippets](https://github.com/CaptainCodeAU/devtools-snippets)
-- **Export Open Tabs** — copy or download every open tab's URLs, grouped by window, as plain text or a markdown table with verified favicons
+- **Export Open Tabs** — copy or download every open tab's URLs, grouped by window, as plain text or markdown
+- **Tab URLs Settings** — configure exactly what that export looks like: which fields, their order, table vs. list, compact vs. expanded, with a live preview
 
 ## Installation
 
@@ -34,9 +35,10 @@ Personal-use tool. Not published to the Chrome Web Store.
 | Execute a snippet | `Alt+Shift+1`–`9`, or left-click extension icon and select, or right-click page context menu |
 | Manage snippets | Right-click extension icon → **Options** |
 | Reorder snippets | Drag snippets up/down in the manager sidebar |
-| Import snippets | Click **Import** in the manager toolbar, select a JSON file |
-| Export snippets | Click **Export** in the manager toolbar |
+| Import snippets | Click **Import Snippets** in the manager toolbar, select a JSON file |
+| Export snippets | Click **Export Snippets** in the manager toolbar |
 | Export open tabs | Hover (or click) the popup's export icon, or right-click the toolbar icon — pick Download/Copy × Markdown/Text |
+| Configure tab-URL export format | Click **Tab URLs Settings** in the manager toolbar |
 
 ### URL Patterns
 
@@ -66,7 +68,9 @@ trigger-code-snippets/
 ├── content.js             # Keyboard shortcut listener (Alt+Shift+1-9)
 ├── offscreen.html / .js   # Clipboard writes (service workers can't touch it)
 ├── shared/
-│   └── storage.js         # Storage CRUD, URL matching, import/export
+│   ├── storage.js         # Storage CRUD, URL matching, import/export
+│   └── tabExportFormat.js # Tab-URL export rendering, shared by background.js
+│                          # and the manager's live settings preview
 ├── popup/
 │   ├── popup.html
 │   ├── popup.css

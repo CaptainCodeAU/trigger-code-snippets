@@ -1,6 +1,8 @@
 // Storage utilities for Trigger Code Snippets
 // Used by background.js, popup.js, and manager.js (ES module)
 
+import { FIELD_IDS, TEXT_FIELD_IDS } from './tabExportFormat.js';
+
 export async function getSnippets() {
   const { snippets = [] } = await chrome.storage.local.get('snippets');
   return snippets.sort((a, b) => a.position - b.position);
@@ -160,4 +162,65 @@ export function validateImportSchema(data) {
     typeof s.code === 'string' &&
     Array.isArray(s.allowedUrls)
   );
+}
+
+// --- Tab-URL export settings (Copy/Download menu formatting) ---
+
+// Reproduces today's hardcoded output exactly, so existing users see no
+// change until they open the settings panel and touch something.
+export const DEFAULT_EXPORT_SETTINGS = {
+  markdown: {
+    fields: ['index', 'icon', 'title', 'url'],
+    layout: 'table',
+    orientation: 'normal'
+  },
+  text: {
+    fields: ['url'],
+    orientation: 'normal'
+  }
+};
+
+// Drops any saved field id that's no longer a real field (e.g. one that got
+// removed from FIELD_IDS after a user had already checked it) -- otherwise a
+// stale id lingers forever as a checked-but-blank row, since nothing else
+// ever prunes what's already saved. Falls back to the shipped defaults if
+// that leaves nothing checked at all.
+function sanitizeFields(fields, allowedFieldIds, fallback) {
+  const cleaned = Array.isArray(fields) ? fields.filter((f) => allowedFieldIds.includes(f)) : [];
+  return cleaned.length > 0 ? cleaned : [...fallback];
+}
+
+function mergeExportSettings(saved) {
+  const merged = {
+    markdown: { ...DEFAULT_EXPORT_SETTINGS.markdown, ...(saved?.markdown || {}) },
+    text: { ...DEFAULT_EXPORT_SETTINGS.text, ...(saved?.text || {}) }
+  };
+  merged.markdown.fields = sanitizeFields(merged.markdown.fields, FIELD_IDS, DEFAULT_EXPORT_SETTINGS.markdown.fields);
+  merged.text.fields = sanitizeFields(merged.text.fields, TEXT_FIELD_IDS, DEFAULT_EXPORT_SETTINGS.text.fields);
+  return merged;
+}
+
+export async function getExportSettings() {
+  const { exportSettings } = await chrome.storage.local.get('exportSettings');
+  return mergeExportSettings(exportSettings);
+}
+
+function isValidExportFormatSettings(settings, allowedFieldIds) {
+  if (!settings || typeof settings !== 'object') return false;
+  const { fields, layout, orientation } = settings;
+  if (!Array.isArray(fields) || fields.length === 0) return false;
+  if (!fields.every(f => allowedFieldIds.includes(f))) return false;
+  if (layout !== undefined && layout !== 'table' && layout !== 'list') return false;
+  if (orientation !== 'normal' && orientation !== 'transposed') return false;
+  return true;
+}
+
+export async function saveExportSettings(settings) {
+  if (!isValidExportFormatSettings(settings.markdown, FIELD_IDS)) {
+    throw new Error('Invalid markdown export settings');
+  }
+  if (!isValidExportFormatSettings(settings.text, TEXT_FIELD_IDS)) {
+    throw new Error('Invalid text export settings');
+  }
+  await chrome.storage.local.set({ exportSettings: settings });
 }

@@ -98,15 +98,26 @@ Personal-use tool. Chrome only. No publishing to the Chrome Web Store.
 - A dedicated icon in the popup header (left of the settings gear) opens a **hover-triggered dropdown** — no click needed, though clicking also toggles it as a touch/keyboard fallback. A small invisible zone extends the hover area to the icon's left, so the dropdown doesn't close from a mouse drifting slightly off a fairly narrow button.
 - The dropdown is grouped by action rather than spelling out every combination: a **Download** header (Markdown, Text), a separator, then a **Copy** header (Markdown, Text).
 - Right-clicking the toolbar icon offers the same 4 choices, via a native nested context-menu submenu with the same Download/Copy grouping.
-- **Text**: tabs grouped by browser window (`Window N (X tabs):`), one URL per line, no titles.
-- **Markdown** (same content for both Copy and Download — they only differ in where the result goes): grouped by window (`## Window N (X tabs)`), each window a table with columns **Index | Icon | Title | URL | Flags**.
-  - **Icon** is the tab's real favicon as a markdown image, wrapped in `<>` (CommonMark's link-destination syntax that allows spaces — some sites' inline-SVG favicons contain literal spaces, which breaks plain `![]()` syntax and prints as visible text instead of an image). A favicon is only referenced once a live HEAD request confirms it actually returns image content; a favicon repeated across many tabs is written once as a shared markdown reference link (`![icon][fav1]`) instead of duplicated per row — some sites' favicons run to 100KB+.
+- **Text**: tabs grouped by browser window (`Window N (X tabs):`). Shape depends on the **Tab URLs Settings** panel (below) — the shipped default is a URL-only, one-line-per-tab list, matching the extension's original behavior.
+- **Markdown** (same content for both Copy and Download — they only differ in where the result goes): grouped by window (`## Window N (X tabs)`). Shape (which fields, their order, table vs. list, one-row-per-tab vs. one-block-per-tab) is configurable via **Tab URLs Settings**; the shipped default is a table with columns **Index | Icon | Title | URL**.
+  - **Icon** is the tab's real favicon as a markdown image, wrapped in `<>` (CommonMark's link-destination syntax that allows spaces — some sites' inline-SVG favicons contain literal spaces, which breaks plain `![]()` syntax and prints as visible text instead of an image). A favicon is only referenced once a live HEAD request confirms it actually returns image content; a favicon repeated across many tabs is written once as a shared markdown reference link (`![icon][fav1]`) instead of duplicated per row — some sites' favicons run to 100KB+. The favicon network check only runs when the Icon field is actually enabled, and only for Markdown (Text can't show a real image, so Icon isn't offered there).
   - Falls back to an emoji when a real favicon doesn't apply or shouldn't be probed: 🧩 `chrome-extension://` tabs, 💾 `file://` tabs, 🖥️ tabs on a bare IP address (deliberately not probed — guessing there would mean the extension fetching an arbitrary network address on its own), ⚙️ internal `chrome://` pages, 🌐 a favicon was attempted but nothing loaded.
   - If Chrome reports no favicon at all, the extension guesses the tab's **registrable domain's** `/favicon.ico` (strips any subdomain, e.g. `docs.nvidia.com` → `nvidia.com`, since a subdomain rarely hosts its own icon) and verifies it the same way before using it.
-  - **Flags** lists only the tab states currently true, from: `active`, `pinned`, `incognito`, `discarded`, `frozen`.
-  - The Icon column is center-aligned (`:---:`) so an emoji sits where a real image would.
+  - When a table's Icon column is enabled it's center-aligned (`:---:`) so an emoji sits where a real image would.
+  - A literal `|` in a field's value (a tab title, say) is backslash-escaped in every markdown layout (table and list) so it can never be mistaken for column/field syntax; Text output has no such escaping since it isn't markdown.
 - **Copy** writes the text to the clipboard via the offscreen document (service workers have no clipboard access). **Download** saves it as a dated file (`tab-urls-YYYY-MM-DD.txt` / `.md`) via `chrome.downloads.download()` with a `data:` URL — a `blob:` URL created in a service worker isn't reliably fetchable by the downloads API. `saveAs` is left unset, so it follows the user's own Chrome "ask where to save" setting rather than forcing a dialog either way.
 - Uses `chrome.tabs.query({})` in spanning mode, so every open window is covered, incognito included.
+
+### 9a. Tab URLs Settings (Manager Toolbar Button)
+
+- A teal, icon-labeled toolbar button on the management page opens a modal that controls exactly what §9's Copy/Download output looks like, separately for Markdown and Text (a button-style Markdown/Text switch at the top of the modal).
+- **Fields**: a checkbox + drag-to-reorder list (same drag mechanics as the snippet sidebar). Checked = included in the output, in the order shown; unchecking never changes any row's position — only the drag handle reorders. `( default · select all · clear )` inline shortcuts: reset this format back to its shipped default, check every field, or clear down to just URL. At least one field must always stay checked. The list itself scrolls (capped height) so it stays compact as fields are added.
+- Available fields: Index (1-based — this is for a person counting tabs, not code indexing an array), Icon (Markdown only), Title, URL, Flags (`active`/`pinned`/`incognito`/`discarded`/`frozen` combined into one column), Window, Status, Audible, Tab ID, Discarded, Active. Only Index/Icon/Title/URL/Flags ship checked by default (Icon/Flags excepted — Markdown's shipped default is Index/Icon/Title/URL, Text's is URL only); everything else ships unchecked.
+- **Layout** (Markdown only — Text has no table concept): **Table** (today's default shape) or **List** (bullet-style, no table syntax).
+- **Orientation** (both formats): **Compact** (all chosen fields together on one row/line per tab) or **Expanded** (each tab becomes its own multi-line "Field: Value" block — a 2-column Field/Value mini-table in Markdown's Table layout, a Field/Value line list otherwise).
+- **Preview**: a live, raw-text rendering of the current settings against a fixed set of generic sample tabs (not the user's real open tabs) — same `renderExport()` code path as the real export, so it can't drift out of sync.
+- Autosaves exactly like snippet edits (800ms debounce, "Auto-saved ✓" indicator) into a new `exportSettings` storage key. No import/export for this settings blob.
+- A field id that's no longer valid (removed in a later version, e.g. `muted` was cut after shipping) is silently dropped from saved settings on every read, rather than lingering as a checked-but-blank row.
 
 ---
 
@@ -122,7 +133,7 @@ Personal-use tool. Chrome only. No publishing to the Chrome Web Store.
 
 - **Toolbar** (top bar):
   - Left: ⚡ logo and "Trigger Code Snippets" title.
-  - Right: Auto-save indicator, Import button, Export button, "+ New Snippet" button.
+  - Right: Auto-save indicator, "Tab URLs Settings" button (see [§9a](#9a-tab-urls-settings-manager-toolbar-button)), "Import Snippets" button, "Export Snippets" button, "+ New Snippet" button (green).
 - **Sidebar** (left panel, default 400px, resizable 200–600px via drag handle):
   - Header with "Snippets" label and count badge.
   - Scrollable list of snippets, each showing:
@@ -186,7 +197,11 @@ Personal-use tool. Chrome only. No publishing to the Chrome Web Store.
       "position": 0
     }
   ],
-  "initialized": true
+  "initialized": true,
+  "exportSettings": {
+    "markdown": { "fields": ["index", "icon", "title", "url"], "layout": "table", "orientation": "normal" },
+    "text": { "fields": ["url"], "orientation": "normal" }
+  }
 }
 ```
 
@@ -198,16 +213,21 @@ trigger-code-snippets/
 ├── background.js          # Service worker (ES module): handles context menus,
 │                          # debugger-based script execution, message routing,
 │                          # first-install defaults, storage change listeners,
-│                          # Export Open Tabs (favicon resolution, text/markdown
-│                          # formatting, clipboard write, file download)
+│                          # Export Open Tabs (favicon resolution, then hands
+│                          # off to shared/tabExportFormat.js to render)
 ├── content.js             # Content script (IIFE): listens for Alt+Shift+1-9
 │                          # keydown events, sends messages to background
 ├── offscreen.html         # Offscreen document (clipboard writes only --
 ├── offscreen.js           # service workers have no clipboard access)
 ├── shared/
-│   └── storage.js         # ES module: CRUD operations, URL pattern matching
-│                          # (match pattern → RegExp), import/export with
-│                          # deduplication, schema validation
+│   ├── storage.js         # ES module: CRUD operations, URL pattern matching
+│   │                      # (match pattern → RegExp), import/export with
+│   │                      # deduplication, schema validation, tab-URL export
+│   │                      # settings get/save (with stale-field sanitizing)
+│   └── tabExportFormat.js # ES module, no chrome.* calls: pure field registry
+│                          # + renderExport() -- table/list x compact/expanded
+│                          # rendering shared by background.js (real export)
+│                          # and manager.js (settings-panel live preview)
 ├── popup/
 │   ├── popup.html         # Toolbar popup page
 │   ├── popup.css          # Dark theme popup styles
@@ -218,7 +238,8 @@ trigger-code-snippets/
 │   ├── manager.css        # Dark theme styles with CSS custom properties
 │   └── manager.js         # ES module: snippet CRUD, auto-save with debounce,
 │                          # drag-and-drop reorder, import/export UI,
-│                          # line number gutter, sidebar resize, URL validation
+│                          # line number gutter, sidebar resize, URL validation,
+│                          # Tab URLs Settings modal (§9a)
 ├── defaults/
 │   └── default-snippets.json  # 16 pre-loaded snippets from GitHub repo
 ├── icons/

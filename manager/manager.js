@@ -1,8 +1,10 @@
 import {
   getSnippets, saveSnippets,
   isValidMatchPattern, exportSnippets as exportToJson,
-  importSnippets as doImport, validateImportSchema
+  importSnippets as doImport, validateImportSchema,
+  getExportSettings, saveExportSettings, DEFAULT_EXPORT_SETTINGS
 } from '../shared/storage.js';
+import { FIELD_IDS, FIELD_LABELS, TEXT_FIELD_IDS, renderExport } from '../shared/tabExportFormat.js';
 
 // ===== State =====
 let snippets = [];
@@ -23,6 +25,7 @@ const saveIndicator = document.getElementById('save-indicator');
 const btnAdd = document.getElementById('btn-add');
 const btnImport = document.getElementById('btn-import');
 const btnExport = document.getElementById('btn-export');
+const btnTabListFormat = document.getElementById('btn-tab-list-format');
 const btnDelete = document.getElementById('btn-delete');
 const importInput = document.getElementById('import-input');
 const lineNumbers = document.getElementById('line-numbers');
@@ -39,6 +42,7 @@ function setupEventListeners() {
   btnDelete.addEventListener('click', deleteSelectedSnippet);
   btnImport.addEventListener('click', () => importInput.click());
   btnExport.addEventListener('click', handleExport);
+  btnTabListFormat.addEventListener('click', showExportSettingsDialog);
   importInput.addEventListener('change', handleImportFile);
 
   nameInput.addEventListener('input', () => {
@@ -407,6 +411,307 @@ function showImportDialog(data) {
   overlay.addEventListener('click', (e) => {
     if (e.target === overlay) overlay.remove();
   });
+}
+
+// ===== Tab URLs Settings =====
+
+// Fixed fake tabs (two windows) for the live preview -- deliberately generic
+// (example.com/.org/.net, no real product names) rather than the user's real
+// open tabs, so the preview is simple, deterministic, and never needs
+// chrome.tabs.query permission from this page. Icon is a plain emoji (no
+// real favicon network check -- that's background.js's job for the actual
+// export).
+const EXPORT_PREVIEW_TABS = [
+  [
+    { id: 101, index: 0, title: 'Example Domain', url: 'https://example.com/', icon: '\u{1F310}', pinned: true, status: 'complete' },
+    { id: 102, index: 1, title: 'Sample Page', url: 'https://example.org/sample-page', icon: '\u{1F310}', active: true, status: 'complete', audible: true }
+  ],
+  [
+    { id: 103, index: 0, title: 'Another Example', url: 'https://example.net/docs', icon: '\u{1F310}', discarded: true, status: 'complete' }
+  ]
+];
+
+function showExportSettingsDialog() {
+  let exportSettings;
+  let currentSubview = 'markdown';
+  let fieldOrder = []; // full (checked + unchecked) field order for the open subview
+  let fieldDragSourceIndex = null;
+  let exportSaveTimeout = null;
+
+  const overlay = document.createElement('div');
+  overlay.className = 'export-settings-overlay';
+  overlay.innerHTML = `
+    <div class="export-settings-dialog">
+      <div class="export-settings-header">
+        <h3>Tab URLs Settings</h3>
+        <button type="button" class="dialog-close-btn" id="export-settings-close" title="Close" aria-label="Close">&times;</button>
+      </div>
+      <p class="export-settings-intro">Controls what the popup's Copy and Download buttons produce.</p>
+
+      <div class="toggle-btn-group" id="export-format-group">
+        <button type="button" class="toggle-option-btn active" data-value="markdown">Markdown</button>
+        <button type="button" class="toggle-option-btn" data-value="text">Text</button>
+      </div>
+
+      <div class="export-settings-columns">
+        <div class="export-settings-column">
+          <div class="export-settings-section">
+            <label class="section-title">Fields <span class="label-hint">Drag to reorder, uncheck to hide ( <button type="button" class="link-btn" id="export-reset-defaults">default</button> · <button type="button" class="link-btn" id="export-select-all">select all</button> · <button type="button" class="link-btn" id="export-clear-fields">clear</button> )</span></label>
+            <div class="field-list" id="export-field-list"></div>
+          </div>
+        </div>
+
+        <div class="export-settings-column">
+          <div class="export-settings-section" id="export-layout-section">
+            <label class="section-title">Layout</label>
+            <div class="toggle-btn-group" id="export-layout-group">
+              <button type="button" class="toggle-option-btn" data-value="table">Table</button>
+              <button type="button" class="toggle-option-btn" data-value="list">List</button>
+            </div>
+          </div>
+
+          <div class="export-settings-section">
+            <label class="section-title">Orientation</label>
+            <div class="toggle-btn-group" id="export-orientation-group">
+              <button type="button" class="toggle-option-btn" data-value="normal">Compact</button>
+              <button type="button" class="toggle-option-btn" data-value="transposed">Expanded</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="export-settings-section export-preview-section">
+        <label class="section-title">Preview <span class="label-hint">Sample tabs, illustrative only</span></label>
+        <pre class="export-preview" id="export-preview"></pre>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  const fieldListEl = overlay.querySelector('#export-field-list');
+  const layoutSectionEl = overlay.querySelector('#export-layout-section');
+  const layoutGroupEl = overlay.querySelector('#export-layout-group');
+  const orientationGroupEl = overlay.querySelector('#export-orientation-group');
+  const formatGroupEl = overlay.querySelector('#export-format-group');
+  const previewEl = overlay.querySelector('#export-preview');
+  const selectAllBtn = overlay.querySelector('#export-select-all');
+  const clearFieldsBtn = overlay.querySelector('#export-clear-fields');
+  const resetBtn = overlay.querySelector('#export-reset-defaults');
+
+  function scheduleExportSettingsSave() {
+    updateSaveIndicator('saving');
+    clearTimeout(exportSaveTimeout);
+    exportSaveTimeout = setTimeout(async () => {
+      await saveExportSettings(exportSettings);
+      updateSaveIndicator('saved');
+      clearTimeout(saveIndicatorTimeout);
+      saveIndicatorTimeout = setTimeout(() => updateSaveIndicator('idle'), 2500);
+    }, 800);
+  }
+
+  function updatePreview() {
+    previewEl.textContent = renderExport(EXPORT_PREVIEW_TABS, currentSubview, exportSettings[currentSubview]);
+  }
+
+  // Recomputes the full (checked + unchecked) row order from scratch --
+  // called only when there's genuinely no existing order to preserve yet
+  // (first load, switching Markdown/Text, or an explicit "default" reset).
+  // Never called from a checkbox toggle: unchecking a field must only hide
+  // it, not reshuffle every other row -- the drag handle is the only thing
+  // that's supposed to change row position.
+  function seedFieldOrder() {
+    const allIds = currentSubview === 'markdown' ? FIELD_IDS : TEXT_FIELD_IDS;
+    const selected = exportSettings[currentSubview].fields;
+    fieldOrder = [...selected, ...allIds.filter(id => !selected.includes(id))];
+  }
+
+  function renderFieldList() {
+    const selected = exportSettings[currentSubview].fields;
+
+    fieldListEl.innerHTML = '';
+    fieldOrder.forEach((fieldId, index) => {
+      const item = document.createElement('div');
+      item.className = 'field-item';
+      item.dataset.fieldId = fieldId;
+      item.dataset.index = index;
+      item.draggable = true;
+
+      const handle = document.createElement('span');
+      handle.className = 'drag-handle';
+      handle.textContent = '≡';
+      item.appendChild(handle);
+
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.checked = selected.includes(fieldId);
+      checkbox.addEventListener('change', () => toggleField(fieldId, checkbox));
+      item.appendChild(checkbox);
+
+      const label = document.createElement('span');
+      label.className = 'field-item-label';
+      label.textContent = FIELD_LABELS[fieldId];
+      item.appendChild(label);
+
+      item.addEventListener('dragstart', handleFieldDragStart);
+      item.addEventListener('dragover', handleFieldDragOver);
+      item.addEventListener('dragleave', handleFieldDragLeave);
+      item.addEventListener('drop', handleFieldDrop);
+      item.addEventListener('dragend', handleFieldDragEnd);
+
+      fieldListEl.appendChild(item);
+    });
+  }
+
+  function renderControls() {
+    const settings = exportSettings[currentSubview];
+    layoutSectionEl.style.display = currentSubview === 'markdown' ? '' : 'none';
+    layoutGroupEl.querySelectorAll('.toggle-option-btn').forEach((btn) => {
+      btn.classList.toggle('active', btn.dataset.value === settings.layout);
+    });
+    orientationGroupEl.querySelectorAll('.toggle-option-btn').forEach((btn) => {
+      btn.classList.toggle('active', btn.dataset.value === settings.orientation);
+    });
+  }
+
+  function toggleField(fieldId, checkbox) {
+    const fields = exportSettings[currentSubview].fields;
+    if (!checkbox.checked && fields.length <= 1) {
+      // At least one field must stay visible.
+      checkbox.checked = true;
+      return;
+    }
+    // Derived from the existing row order, never rebuilt from scratch --
+    // checking/unchecking only changes which rows are included, never where
+    // any row sits.
+    const checkedSet = new Set(fields);
+    if (checkbox.checked) checkedSet.add(fieldId); else checkedSet.delete(fieldId);
+    exportSettings[currentSubview].fields = fieldOrder.filter((id) => checkedSet.has(id));
+
+    renderFieldList();
+    updatePreview();
+    scheduleExportSettingsSave();
+  }
+
+  function handleFieldDragStart(e) {
+    fieldDragSourceIndex = parseInt(e.currentTarget.dataset.index);
+    e.currentTarget.classList.add('dragging');
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', String(fieldDragSourceIndex));
+  }
+
+  function handleFieldDragOver(e) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    const item = e.currentTarget;
+    const rect = item.getBoundingClientRect();
+    const midY = rect.top + rect.height / 2;
+    item.classList.remove('drag-over-top', 'drag-over-bottom');
+    item.classList.add(e.clientY < midY ? 'drag-over-top' : 'drag-over-bottom');
+  }
+
+  function handleFieldDragLeave(e) {
+    e.currentTarget.classList.remove('drag-over-top', 'drag-over-bottom');
+  }
+
+  function handleFieldDrop(e) {
+    e.preventDefault();
+    const target = e.currentTarget;
+    target.classList.remove('drag-over-top', 'drag-over-bottom');
+
+    const targetIndex = parseInt(target.dataset.index);
+    if (fieldDragSourceIndex === null || fieldDragSourceIndex === targetIndex) return;
+
+    const rect = target.getBoundingClientRect();
+    const midY = rect.top + rect.height / 2;
+    let insertAt = e.clientY < midY ? targetIndex : targetIndex + 1;
+    if (fieldDragSourceIndex < insertAt) insertAt--;
+
+    const [moved] = fieldOrder.splice(fieldDragSourceIndex, 1);
+    fieldOrder.splice(insertAt, 0, moved);
+
+    const checkedSet = new Set(exportSettings[currentSubview].fields);
+    exportSettings[currentSubview].fields = fieldOrder.filter((id) => checkedSet.has(id));
+
+    renderFieldList();
+    updatePreview();
+    scheduleExportSettingsSave();
+  }
+
+  function handleFieldDragEnd(e) {
+    e.currentTarget.classList.remove('dragging');
+    fieldListEl.querySelectorAll('.drag-over-top, .drag-over-bottom').forEach((el) => {
+      el.classList.remove('drag-over-top', 'drag-over-bottom');
+    });
+    fieldDragSourceIndex = null;
+  }
+
+  formatGroupEl.addEventListener('click', (e) => {
+    const btn = e.target.closest('.toggle-option-btn');
+    if (!btn) return;
+    currentSubview = btn.dataset.value;
+    formatGroupEl.querySelectorAll('.toggle-option-btn').forEach((b) => b.classList.toggle('active', b === btn));
+    seedFieldOrder();
+    renderFieldList();
+    renderControls();
+    updatePreview();
+  });
+
+  layoutGroupEl.addEventListener('click', (e) => {
+    const btn = e.target.closest('.toggle-option-btn');
+    if (!btn) return;
+    exportSettings.markdown.layout = btn.dataset.value;
+    renderControls();
+    updatePreview();
+    scheduleExportSettingsSave();
+  });
+
+  orientationGroupEl.addEventListener('click', (e) => {
+    const btn = e.target.closest('.toggle-option-btn');
+    if (!btn) return;
+    exportSettings[currentSubview].orientation = btn.dataset.value;
+    renderControls();
+    updatePreview();
+    scheduleExportSettingsSave();
+  });
+
+  selectAllBtn.addEventListener('click', () => {
+    // Every row in the existing order becomes checked -- order untouched.
+    exportSettings[currentSubview].fields = [...fieldOrder];
+    renderFieldList();
+    updatePreview();
+    scheduleExportSettingsSave();
+  });
+
+  clearFieldsBtn.addEventListener('click', () => {
+    // Clears down to just URL rather than truly empty -- at least one field
+    // must always stay visible.
+    exportSettings[currentSubview].fields = ['url'];
+    renderFieldList();
+    updatePreview();
+    scheduleExportSettingsSave();
+  });
+
+  resetBtn.addEventListener('click', () => {
+    exportSettings[currentSubview] = structuredClone(DEFAULT_EXPORT_SETTINGS[currentSubview]);
+    seedFieldOrder();
+    renderFieldList();
+    renderControls();
+    updatePreview();
+    scheduleExportSettingsSave();
+  });
+
+  overlay.querySelector('#export-settings-close').addEventListener('click', () => overlay.remove());
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) overlay.remove();
+  });
+
+  (async () => {
+    exportSettings = structuredClone(await getExportSettings());
+    seedFieldOrder();
+    renderFieldList();
+    renderControls();
+    updatePreview();
+  })();
 }
 
 // ===== Line Numbers =====

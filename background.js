@@ -1,7 +1,8 @@
 import {
   getSnippets, saveSnippets, getSnippetById,
-  matchUrl, isInitialized, setInitialized
+  matchUrl, isInitialized, setInitialized, getExportSettings
 } from './shared/storage.js';
+import { renderExport } from './shared/tabExportFormat.js';
 
 // Shared by the popup's dropdown (message-based) and the toolbar-icon
 // right-click submenu (context-menu-based) so both offer the same 4 choices.
@@ -180,21 +181,6 @@ async function getTabGroupsByWindow() {
   return [...byWindow.values()];
 }
 
-function formatGroupsAsText(groups) {
-  return groups
-    .map((tabs, i) => `Window ${i + 1} (${tabs.length} tab${tabs.length === 1 ? '' : 's'}):\n${tabs.map(t => t.url).join('\n')}`)
-    .join('\n\n');
-}
-
-// One row per tab -- used for both Copy-as-Markdown and Download-as-Markdown
-// (Text stays to a plain URL list, for quick pasting). Flags column lists
-// only the ones that are true for that tab.
-const TAB_FLAG_FIELDS = ['active', 'pinned', 'incognito', 'discarded', 'frozen'];
-
-function formatTabFlags(tab) {
-  return TAB_FLAG_FIELDS.filter(f => tab[f]).map(f => `[${f}]`).join(',');
-}
-
 // Stand-in emojis for the Icon column, for cases where a real favicon image
 // either can't apply or shouldn't be fetched.
 const EXTENSION_ICON_EMOJI = '🧩'; // puzzle piece -- Chrome's own extensions icon
@@ -246,17 +232,6 @@ async function faviconExists(url, cache) {
   return promise;
 }
 
-// Some sites' favIconUrl is a data: URI with an inline SVG (a generated
-// emoji-as-icon, e.g.) rather than a normal image file, and those can carry
-// literal spaces/parens -- which breaks markdown's plain ![]() link syntax,
-// so it shows up as visible text instead of an image. Wrapping the
-// destination in <> is CommonMark's own escape hatch for exactly this
-// (a link destination allowed to contain spaces); | still needs escaping
-// since a table row splits on it before any of this is parsed.
-function escapeUrlForAngleBrackets(url) {
-  return url.replace(/\|/g, '%7C').replace(/</g, '%3C').replace(/>/g, '%3E');
-}
-
 // Resolves one tab's Icon cell: an emoji for cases where a real favicon
 // either doesn't apply (extension/local pages) or shouldn't be guessed at
 // (an IP-address host -- guessing there would mean this extension probing
@@ -296,50 +271,32 @@ async function resolveTabIcon(tab, cache) {
     : NO_FAVICON_EMOJI;
 }
 
-async function formatGroupsAsFullMarkdown(groups) {
-  const cell = (value) => String(value ?? '').replace(/\|/g, '\\|').replace(/\n/g, ' ');
+// Resolves and attaches tab.icon across every tab in every window, up front
+// and in parallel, so an identical favicon (the same site open in several
+// tabs) gets deduplicated by the shared module into one reference link
+// instead of once per tab -- same picture in every row, far smaller file.
+async function attachResolvedIcons(groups) {
   const cache = new Map();
-
-  // Resolve every tab's icon up front, across all windows, so an identical
-  // favicon (the same site open in several tabs, or every claude.ai
-  // artifact tab sharing one generic multi-KB icon, seen for real) gets
-  // written into the file once as a markdown reference link instead of
-  // once per tab -- same picture in every row, far smaller file.
   const flatTabs = groups.flat();
-  const iconResults = await Promise.all(flatTabs.map(tab => resolveTabIcon(tab, cache)));
-
-  const refLabels = new Map(); // imageUrl -> "fav1", "fav2", ...
-  const iconCellFor = (result) => {
-    if (typeof result === 'string') return result; // an emoji, inlined as-is
-    if (!refLabels.has(result.imageUrl)) refLabels.set(result.imageUrl, `fav${refLabels.size + 1}`);
-    return `![icon][${refLabels.get(result.imageUrl)}]`;
-  };
-
+  const icons = await Promise.all(flatTabs.map(tab => resolveTabIcon(tab, cache)));
   let cursor = 0;
-  const windowBlocks = groups.map((tabs, i) => {
-    const rows = tabs.map((tab) => {
-      const icon = iconCellFor(iconResults[cursor++]);
-      return `| ${cell(tab.index)} | ${icon} | ${cell(tab.title || tab.url)} | ${cell(tab.url)} | ${cell(formatTabFlags(tab))} |`;
-    }).join('\n');
-    // Icon column is center-aligned (the :---: marker) so an emoji sits in
-    // the same spot a real favicon image would -- most viewers auto-center
-    // images but leave plain text/emoji at the default left alignment.
-    return `## Window ${i + 1} (${tabs.length} tab${tabs.length === 1 ? '' : 's'})\n\n| Index | Icon | Title | URL | Flags |\n|---|:---:|---|---|---|\n${rows}`;
-  });
-
-  const refDefs = [...refLabels.entries()]
-    .map(([url, label]) => `[${label}]: <${escapeUrlForAngleBrackets(url)}>`)
-    .join('\n');
-
-  return [...windowBlocks, refDefs].filter(Boolean).join('\n\n');
+  return groups.map(tabs => tabs.map(tab => ({ ...tab, icon: icons[cursor++] })));
 }
 
 async function buildTabUrlText(format) {
-  const groups = await getTabGroupsByWindow();
-  // Markdown always gets the full per-tab table (icon/title/url/flags,
-  // verified favicons) -- Copy and Download only ever differed in where the
-  // result goes (clipboard vs. a file), never in what it contains.
-  return format === 'markdown' ? await formatGroupsAsFullMarkdown(groups) : formatGroupsAsText(groups);
+  const settings = await getExportSettings();
+  const formatSettings = settings[format];
+  let groups = await getTabGroupsByWindow();
+
+  // Only pay for the favicon network round-trips when Icon is actually
+  // configured to show -- a real win for any export that leaves it out
+  // (every Text export, since Icon is Markdown-only; or a Markdown export
+  // with Icon unchecked).
+  if (format === 'markdown' && formatSettings.fields.includes('icon')) {
+    groups = await attachResolvedIcons(groups);
+  }
+
+  return renderExport(groups, format, formatSettings);
 }
 
 async function copyTabUrls(format) {
