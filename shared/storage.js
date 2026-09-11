@@ -190,6 +190,15 @@ function sanitizeFields(fields, allowedFieldIds, fallback) {
   return cleaned.length > 0 ? cleaned : [...fallback];
 }
 
+// Falls back to the shipped default when a saved value isn't one of the
+// allowed choices -- same self-healing intent as sanitizeFields, needed
+// because isValidExportFormatSettings (used on save) rejects anything
+// outside these exact values, so a bad saved value would otherwise block
+// every future save, not just get ignored.
+function sanitizeChoice(value, allowedValues, fallback) {
+  return allowedValues.includes(value) ? value : fallback;
+}
+
 function mergeExportSettings(saved) {
   const merged = {
     markdown: { ...DEFAULT_EXPORT_SETTINGS.markdown, ...(saved?.markdown || {}) },
@@ -197,6 +206,9 @@ function mergeExportSettings(saved) {
   };
   merged.markdown.fields = sanitizeFields(merged.markdown.fields, FIELD_IDS, DEFAULT_EXPORT_SETTINGS.markdown.fields);
   merged.text.fields = sanitizeFields(merged.text.fields, TEXT_FIELD_IDS, DEFAULT_EXPORT_SETTINGS.text.fields);
+  merged.markdown.layout = sanitizeChoice(merged.markdown.layout, ['table', 'list'], DEFAULT_EXPORT_SETTINGS.markdown.layout);
+  merged.markdown.orientation = sanitizeChoice(merged.markdown.orientation, ['normal', 'transposed'], DEFAULT_EXPORT_SETTINGS.markdown.orientation);
+  merged.text.orientation = sanitizeChoice(merged.text.orientation, ['normal', 'transposed'], DEFAULT_EXPORT_SETTINGS.text.orientation);
   return merged;
 }
 
